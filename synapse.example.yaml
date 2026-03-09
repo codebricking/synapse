@@ -1,0 +1,20 @@
+# Synapse — AI-to-AI message sync
+# Copy to synapse.yaml in your project root
+
+project:
+  name: my-project
+
+sync:
+  # Pull reads from the primary transport only.
+  # Push writes to ALL configured transports.
+  # Default priority: git > lark. Override with primary.
+  # primary: lark
+
+  git:
+    repo: https://github.com/org/synapse-hub.git
+    branch: main
+
+  lark:
+    appId: cli_xxxxxxxxxxxxxxxx
+    appSecret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    chatId: oc_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

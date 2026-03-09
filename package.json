@@ -1,0 +1,53 @@
+{
+  "name": "synapse-sync",
+  "version": "0.1.0",
+  "description": "AI-to-AI message sync — a dumb pipe for your smart agents",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "synapse": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "synapse.example.yaml",
+    "SKILL.md",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "build:binary": "npx tsup src/index.ts --format cjs --no-dts --clean --out-dir dist-bin && npx pkg dist-bin/index.cjs --targets node20-macos-arm64,node20-macos-x64,node20-linux-x64,node20-win-x64 --output bin/synapse",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai",
+    "sync",
+    "message",
+    "devtools",
+    "cursor",
+    "claude"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codebricking/synapse.git"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.11",
+    "commander": "^14.0.3",
+    "cosmiconfig": "^9.0.1",
+    "hono": "^4.12.5",
+    "simple-git": "^3.32.3",
+    "yaml": "^2.8.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "@yao-pkg/pkg": "^6.14.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

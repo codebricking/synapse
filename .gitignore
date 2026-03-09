@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-bin/
+bin/
+.env
+*.log
+.synapse-local/
+.DS_Store
+.idea/

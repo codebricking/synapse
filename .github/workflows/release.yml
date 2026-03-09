@@ -16,7 +16,7 @@ jobs:
           - os: macos-latest
             target: node20-macos-arm64
             artifact: synapse-macos-arm64
-          - os: macos-13
+          - os: macos-latest
             target: node20-macos-x64
             artifact: synapse-macos-x64
           - os: ubuntu-latest
@@ -43,9 +43,24 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
 
-  publish:
+  release:
     needs: build
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+
+  npm-publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: vars.PUBLISH_NPM == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -58,13 +73,3 @@ jobs:
       - run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/*
-          generate_release_notes: true

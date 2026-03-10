@@ -3,6 +3,22 @@ import { cosmiconfig } from 'cosmiconfig';
 import { z } from 'zod';
 import type { SynapseConfig } from './types.js';
 
+const SEARCH_PLACES = [
+  'package.json',
+  'synapse.yaml',
+  'synapse.yml',
+  '.synapserc',
+  '.synapserc.json',
+  '.synapserc.yaml',
+  '.synapserc.yml',
+  '.synapserc.js',
+  '.synapserc.ts',
+  '.synapserc.cjs',
+  'synapse.config.js',
+  'synapse.config.ts',
+  'synapse.config.cjs',
+];
+
 const SynapseConfigSchema = z.object({
   project: z.object({
     name: z.string(),
@@ -47,7 +63,7 @@ function applyDefaults(config: Partial<SynapseConfig>): SynapseConfig {
 }
 
 export async function loadConfigFromPath(configPath: string): Promise<SynapseConfig> {
-  const explorer = cosmiconfig('synapse');
+  const explorer = cosmiconfig('synapse', { searchPlaces: SEARCH_PLACES });
   const result = await explorer.load(configPath);
   if (!result?.config) {
     throw new Error(`Config file not found or empty: ${configPath}`);
@@ -61,7 +77,7 @@ export async function loadConfigFromPath(configPath: string): Promise<SynapseCon
 export async function loadConfig(configPath?: string): Promise<SynapseConfig> {
   if (configPath) return loadConfigFromPath(configPath);
 
-  const explorer = cosmiconfig('synapse');
+  const explorer = cosmiconfig('synapse', { searchPlaces: SEARCH_PLACES });
   const result = await explorer.search();
 
   if (result?.config) {

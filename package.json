@@ -1,6 +1,6 @@
 {
   "name": "synapse-sync",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AI-to-AI message sync — a dumb pipe for your smart agents",
   "type": "module",
   "main": "dist/index.js",

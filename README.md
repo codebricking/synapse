@@ -29,7 +29,7 @@ npx synapse-sync msg list --json
 
 ### 方式 2：下载可执行文件（非技术人员推荐）
 
-从 [GitHub Releases](https://github.com/user/synapse/releases) 下载对应平台的文件：
+从 [GitHub Releases](https://github.com/codebricking/synapse/releases) 下载对应平台的文件：
 
 | 平台 | 文件 |
 |------|------|

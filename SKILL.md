@@ -1,15 +1,80 @@
 ---
 name: synapse-message-sync
-description: Use after making code changes that other team roles need to know about, or at the start of a work session to check for updates. Synapse is a dumb pipe — YOU decide what to sync, when, and what metadata to attach. Transport (Git and/or Feishu) is config-driven.
+description: Use after making code changes that other team roles need to know about, or at the start of a work session to check for updates. Synapse is a dumb pipe — YOU decide what to sync, when, and what metadata to attach. Transport (Git, Local, HTTP, Feishu, or Webhook) is config-driven.
 ---
 
 # Synapse — AI-to-AI Message Sync
 
 Synapse is a **pure message tool**. No AI inside. You decide what to sync and when.
-Transport is determined by `synapse.yaml` — can be Git, Feishu, or both.
+Transport is determined by `synapse.yaml` — can be Git, Local, HTTP, Feishu, Webhook, or any combination.
 
 - **Push** → broadcasts to **all** configured transports
-- **Pull** → reads from the **primary** transport only (default priority: git > lark)
+- **Pull** → reads from the **primary** transport only (default priority: git > local > http > lark > larkWebhook)
+
+### Transport quick pick
+
+| User role | Recommended transport | Config |
+|-----------|----------------------|--------|
+| Developer | `git` (+ optional `larkWebhook`) | `sync.git.repo` |
+| PM / Design | `http` (connect to team server) | `sync.http.url` |
+| Server | `local` | `sync.local.dir` |
+| Notifications only | `larkWebhook` | `sync.larkWebhook.url` |
+
+---
+
+## ⚠️ First-Time Setup (MUST DO before any push/pull)
+
+**When you first use Synapse or encounter push/pull errors, run through this checklist:**
+
+### 1. Install Synapse
+
+```bash
+npm install -g synapse-sync
+# or use without installing:
+npx synapse-sync msg list --json
+```
+
+### 2. Check synapse.yaml
+
+Look for `synapse.yaml` in the project root. If it doesn't exist, ask the user which transport to use and create it.
+
+### 3. Git transport — CRITICAL setup step
+
+If `synapse.yaml` has `sync.git.repo` configured, Synapse stores messages in a **shared Git repository** (NOT the project repo). This shared repo must be accessible:
+
+```bash
+# Verify: can you clone the synapse-hub repo?
+git clone <the repo URL from synapse.yaml sync.git.repo> /tmp/synapse-test && rm -rf /tmp/synapse-test
+```
+
+**If the clone fails**, fix it BEFORE calling any synapse command:
+
+| Problem | Solution |
+|---------|----------|
+| Repo doesn't exist | Ask the team who created the repo, or create it: `gh repo create org/synapse-hub --private` |
+| Auth failed (HTTPS) | Run `git config --global credential.helper store` and do a manual clone to cache credentials |
+| Auth failed (SSH) | Ensure SSH key is added: `ssh -T git@github.com` should succeed |
+| Network/firewall | Check proxy settings or switch to `sync.local` + `sync.http` transport instead |
+
+**Synapse auto-clones the repo** to `~/.synapse/repos/<repo-name>/` on first use. But if git credentials are not configured, the clone fails silently and push/pull will error out.
+
+**Quick fix if stuck:** Manually clone the repo first:
+
+```bash
+mkdir -p ~/.synapse/repos
+git clone <repo-url> ~/.synapse/repos/<repo-name>
+# Then synapse commands will work
+```
+
+### 4. Verify setup
+
+```bash
+# This should succeed without errors:
+synapse msg list --json
+```
+
+If you see `No transport configured` → check synapse.yaml exists.
+If you see git clone/push errors → fix git access (step 3 above).
 
 ---
 
@@ -123,20 +188,21 @@ When PM defines a new requirement:
 
 ### At session start — what should I pull?
 
-Pick the queries that match your role:
+**IMPORTANT:** Always use `--unread` to avoid re-processing messages and wasting tokens.
+Use `--ack` to auto-mark messages as processed after pulling.
 
 ```bash
-# I'm frontend — show me bugs assigned to me
-synapse msg list --category bug --assign-to frontend --json
+# I'm frontend — show me NEW bugs assigned to me (skip already processed)
+synapse msg list --unread --ack --category bug --assign-to frontend --json
 
-# I'm frontend — show me recent API changes
-synapse msg list --category api_change --json
+# I'm frontend — show me NEW API changes
+synapse msg list --unread --ack --category api_change --json
 
-# I'm backend — show me bugs assigned to me
-synapse msg list --category bug --assign-to backend --json
+# I'm backend — show me NEW bugs assigned to me
+synapse msg list --unread --ack --category bug --assign-to backend --json
 
-# Show me everything recent
-synapse msg list --json
+# Show me everything unread
+synapse msg list --unread --ack --json
 ```
 
 After pulling, read `metadata` to decide what to do:
@@ -153,6 +219,12 @@ synapse msg send "已修复: 用户列表分页 500 错误" \
   --role backend --category status \
   --content "原因是 offset 计算溢出，已修复并添加测试。" \
   --metadata '{"type":"status","replyTo":"msg-20260309-abc123"}'
+```
+
+### Manual ack (when you process messages without --ack flag):
+
+```bash
+synapse msg ack msg-20260310-abc123 msg-20260310-def456
 ```
 
 ---

@@ -1,6 +1,6 @@
 {
   "name": "synapse-sync",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "AI-to-AI message sync — a dumb pipe for your smart agents",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/codebricking/synapse.git"
+    "url": "git+https://github.com/codebricking/synapse.git"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.11",

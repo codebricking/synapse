@@ -26,13 +26,26 @@ export class GitTransport implements SynapseTransport {
   private async ensureRepo() {
     if (!existsSync(this.localPath)) {
       await mkdir(join(homedir(), '.synapse', 'repos'), { recursive: true });
-      await simpleGit().clone(this.repo, this.localPath, ['-b', this.branch]);
+      try {
+        await simpleGit().clone(this.repo, this.localPath, ['-b', this.branch]);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `Failed to clone synapse git repo: ${this.repo}\n` +
+          `Error: ${msg}\n\n` +
+          `This is the shared message repo (NOT your project repo). Fix steps:\n` +
+          `  1. Verify the repo exists and you have access\n` +
+          `  2. Check git credentials: git clone ${this.repo} /tmp/synapse-test\n` +
+          `  3. Or manually clone: mkdir -p ~/.synapse/repos && git clone ${this.repo} ${this.localPath}\n` +
+          `  4. If the repo doesn't exist yet, create it first`
+        );
+      }
     }
     const git = simpleGit(this.localPath);
     try {
       await git.pull('origin', this.branch, ['--rebase']);
     } catch {
-      // offline is fine
+      // offline is fine — work with local copy
     }
     return git;
   }
@@ -54,7 +67,20 @@ export class GitTransport implements SynapseTransport {
     const status = await git.status();
     if (status.staged.length > 0) {
       await git.commit(`synapse: [${msg.role}] ${msg.title}`);
-      try { await git.push(); } catch { /* offline ok */ }
+      try {
+        await git.push();
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        if (detail.includes('Authentication') || detail.includes('Permission') || detail.includes('403') || detail.includes('401')) {
+          throw new Error(
+            `Git push failed — authentication error.\n` +
+            `Error: ${detail}\n\n` +
+            `The message was saved locally at ${this.localPath} but could not be pushed to remote.\n` +
+            `Fix: check your git credentials for ${this.repo}`
+          );
+        }
+        // other push errors (offline, etc.) are non-fatal
+      }
     }
     return msg;
   }

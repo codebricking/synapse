@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { loadConfig } from '../config.js';
-import { pushMessage, pullMessages, getTransportNames } from '../sync/messages.js';
+import { pushMessage, pullMessages, getTransportNames, ackMessageById, ackMessagesByIds } from '../sync/messages.js';
 import { C } from './colors.js';
 
 export function createMsgCommand(): Command {
@@ -67,10 +67,12 @@ export function createMsgCommand(): Command {
     .option('--category <cat>', 'Filter by category (bug, api_change, requirement...)')
     .option('--assign-to <role>', 'Filter by metadata.assignTo (e.g. frontend)')
     .option('--limit <n>', 'Max messages to show', '20')
+    .option('--unread', 'Only show unprocessed messages (skip already acked)')
+    .option('--ack', 'Auto-ack all returned messages after listing')
     .option('--json', 'Output as JSON');
 
   list.action(async (
-    opts: { since?: string; role?: string; category?: string; assignTo?: string; limit: string; json?: boolean },
+    opts: { since?: string; role?: string; category?: string; assignTo?: string; limit: string; unread?: boolean; ack?: boolean; json?: boolean },
     command: Command
   ) => {
     const configPath = command?.parent?.parent?.opts?.()?.config as string | undefined;
@@ -83,47 +85,73 @@ export function createMsgCommand(): Command {
       category: opts.category,
       assignTo: opts.assignTo,
       limit: parseInt(opts.limit, 10),
+      unread: opts.unread,
     });
 
     if (opts.json) {
       console.log(JSON.stringify(messages, null, 2));
-      return;
+    } else {
+      const names = getTransportNames(config);
+      const label = opts.unread ? 'Unread messages' : 'Messages';
+      console.log(`${C.bold}${C.cyan}${label} from ${names[0] ?? '?'} (since ${since.slice(0, 10)})${C.reset}\n`);
+
+      if (messages.length === 0) {
+        console.log(`${C.dim}No messages found.${C.reset}`);
+        return;
+      }
+
+      const catIcons: Record<string, string> = {
+        bug: '\u{1F41B}', api_change: '\u{1F504}', requirement: '\u{1F4CB}',
+        decision: '\u{2696}\u{FE0F}', status: '\u{1F4E2}', note: '\u{1F4DD}',
+      };
+
+      const currentProject = config.project.name;
+      for (const m of messages) {
+        const icon = catIcons[m.category] ?? '\u{1F4AC}';
+        const roleColor = m.role === 'backend' ? C.blue : m.role === 'frontend' ? C.green : C.yellow;
+        const meta = m.metadata as Record<string, unknown> | undefined;
+        const severity = meta?.severity ? ` [${meta.severity}]` : '';
+        const assignTo = meta?.assignTo ? ` \u2192 ${meta.assignTo}` : '';
+        const projectTag = m.project !== currentProject ? ` ${C.dim}(${m.project})${C.reset}` : '';
+
+        console.log(
+          `  ${icon} ${C.dim}${m.timestamp.slice(0, 16)}${C.reset} ${roleColor}[${m.role}]${C.reset}${projectTag} ${C.bold}${m.title}${C.reset}${C.red}${severity}${C.reset}${C.cyan}${assignTo}${C.reset}`
+        );
+        const preview = m.content.length > 80 ? m.content.slice(0, 80) + '...' : m.content;
+        console.log(`    ${C.dim}${preview}${C.reset}`);
+        console.log();
+      }
+
+      console.log(`${C.dim}Total: ${messages.length} message(s)${C.reset}`);
     }
 
-    const names = getTransportNames(config);
-    console.log(`${C.bold}${C.cyan}Messages from ${names[0] ?? '?'} (since ${since.slice(0, 10)})${C.reset}\n`);
-
-    if (messages.length === 0) {
-      console.log(`${C.dim}No messages found.${C.reset}`);
-      return;
+    if (opts.ack && messages.length > 0) {
+      const count = await ackMessagesByIds(messages.map((m) => m.id), config);
+      if (!opts.json) {
+        console.log(`${C.green}\u2713 Acked ${count} message(s)${C.reset}`);
+      }
     }
+  });
 
-    const catIcons: Record<string, string> = {
-      bug: '\u{1F41B}', api_change: '\u{1F504}', requirement: '\u{1F4CB}',
-      decision: '\u{2696}\u{FE0F}', status: '\u{1F4E2}', note: '\u{1F4DD}',
-    };
+  // ── ack ──────────────────────────────────────────────
 
-    const currentProject = config.project.name;
-    for (const m of messages) {
-      const icon = catIcons[m.category] ?? '\u{1F4AC}';
-      const roleColor = m.role === 'backend' ? C.blue : m.role === 'frontend' ? C.green : C.yellow;
-      const meta = m.metadata as Record<string, unknown> | undefined;
-      const severity = meta?.severity ? ` [${meta.severity}]` : '';
-      const assignTo = meta?.assignTo ? ` \u2192 ${meta.assignTo}` : '';
-      const projectTag = m.project !== currentProject ? ` ${C.dim}(${m.project})${C.reset}` : '';
+  const ack = new Command('ack');
+  ack
+    .description('Mark message(s) as processed (prevents re-processing)')
+    .argument('<ids...>', 'Message ID(s) to ack');
 
-      console.log(
-        `  ${icon} ${C.dim}${m.timestamp.slice(0, 16)}${C.reset} ${roleColor}[${m.role}]${C.reset}${projectTag} ${C.bold}${m.title}${C.reset}${C.red}${severity}${C.reset}${C.cyan}${assignTo}${C.reset}`
-      );
-      const preview = m.content.length > 80 ? m.content.slice(0, 80) + '...' : m.content;
-      console.log(`    ${C.dim}${preview}${C.reset}`);
-      console.log();
-    }
-
-    console.log(`${C.dim}Total: ${messages.length} message(s)${C.reset}`);
+  ack.action(async (
+    ids: string[],
+    command: Command
+  ) => {
+    const configPath = command?.parent?.parent?.opts?.()?.config as string | undefined;
+    const config = await loadConfig(configPath);
+    const count = await ackMessagesByIds(ids, config);
+    console.log(`${C.green}\u2713 Acked ${count} new message(s)${C.reset} ${C.dim}(${ids.length} requested, ${ids.length - count} already acked)${C.reset}`);
   });
 
   cmd.addCommand(send);
   cmd.addCommand(list);
+  cmd.addCommand(ack);
   return cmd;
 }

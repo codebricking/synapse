@@ -25,7 +25,7 @@ const SynapseConfigSchema = z.object({
   }),
   sync: z
     .object({
-      primary: z.enum(['git', 'lark']).optional(),
+      primary: z.enum(['git', 'lark', 'local', 'http']).optional(),
       git: z
         .object({
           repo: z.string(),
@@ -40,6 +40,22 @@ const SynapseConfigSchema = z.object({
           webhookUrl: z.string().optional(),
         })
         .optional(),
+      larkWebhook: z
+        .object({
+          url: z.string(),
+        })
+        .optional(),
+      local: z
+        .object({
+          dir: z.string().optional(),
+        })
+        .optional(),
+      http: z
+        .object({
+          url: z.string(),
+          token: z.string().optional(),
+        })
+        .optional(),
     })
     .optional()
     .default({}),
@@ -47,7 +63,12 @@ const SynapseConfigSchema = z.object({
 
 let _configPath: string | null = null;
 
+function hasAnyTransport(sync?: Partial<SynapseConfig['sync']>): boolean {
+  return !!(sync?.git || sync?.lark || sync?.larkWebhook || sync?.local || sync?.http);
+}
+
 function applyDefaults(config: Partial<SynapseConfig>): SynapseConfig {
+  const useLocalFallback = !hasAnyTransport(config.sync);
   return {
     project: {
       name: config.project?.name ?? path.basename(process.cwd()),
@@ -58,6 +79,9 @@ function applyDefaults(config: Partial<SynapseConfig>): SynapseConfig {
         ? { repo: config.sync.git.repo, branch: config.sync.git.branch ?? 'main' }
         : undefined,
       lark: config.sync?.lark,
+      larkWebhook: config.sync?.larkWebhook,
+      local: config.sync?.local ?? (useLocalFallback ? {} : undefined),
+      http: config.sync?.http,
     },
   };
 }

@@ -57,6 +57,7 @@ export interface MessageQuery {
   project?: string;
   assignTo?: string;
   limit?: number;
+  unread?: boolean;
 }
 
 // ── Config ───────────────────────────────────────────
@@ -66,7 +67,7 @@ export interface SynapseConfig {
     name: string;
   };
   sync: {
-    primary?: 'git' | 'lark';
+    primary?: 'git' | 'lark' | 'local' | 'http';
     git?: {
       repo: string;
       branch?: string;
@@ -76,6 +77,16 @@ export interface SynapseConfig {
       appSecret: string;
       chatId: string;
       webhookUrl?: string;
+    };
+    larkWebhook?: {
+      url: string;
+    };
+    local?: {
+      dir?: string;
+    };
+    http?: {
+      url: string;
+      token?: string;
     };
   };
 }

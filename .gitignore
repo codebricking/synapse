@@ -3,6 +3,7 @@ dist/
 dist-bin/
 bin/
 .env
+.npmrc
 *.log
 .synapse-local/
 .DS_Store

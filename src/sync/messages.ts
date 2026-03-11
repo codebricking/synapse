@@ -2,6 +2,10 @@ import { randomBytes } from 'node:crypto';
 import type { SynapseMessage, SynapseConfig, MessageQuery, SynapseTransport } from '../types.js';
 import { GitTransport } from './git-transport.js';
 import { LarkTransport } from './lark-transport.js';
+import { LocalTransport } from './local-transport.js';
+import { HttpTransport } from './http-transport.js';
+import { LarkWebhookTransport } from './lark-webhook-transport.js';
+import { getAckedIds, ackMessage, ackMessages } from './ack-store.js';
 
 function generateId(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -11,17 +15,24 @@ function generateId(): string {
 function buildTransport(name: string, config: SynapseConfig): SynapseTransport | null {
   if (name === 'git' && config.sync.git?.repo) return new GitTransport(config);
   if (name === 'lark' && config.sync.lark?.appId) return new LarkTransport(config);
+  if (name === 'local' && config.sync.local) return new LocalTransport(config);
+  if (name === 'http' && config.sync.http?.url) return new HttpTransport(config);
+  if (name === 'larkWebhook' && config.sync.larkWebhook?.url) return new LarkWebhookTransport(config);
   return null;
 }
 
+const DEFAULT_PRIORITY = ['git', 'local', 'http', 'lark', 'larkWebhook'] as const;
+
 /**
  * All configured transports, ordered by priority.
- * Default priority: git > lark. Override with sync.primary.
+ * Default priority: git > local > http > lark > larkWebhook.
+ * Override primary with sync.primary (only affects pull source).
  */
 function allTransports(config: SynapseConfig): { name: string; transport: SynapseTransport }[] {
-  const order: string[] = config.sync.primary === 'lark'
-    ? ['lark', 'git']
-    : ['git', 'lark'];
+  const primary = config.sync.primary;
+  const order = primary
+    ? [primary, ...DEFAULT_PRIORITY.filter((n) => n !== primary)]
+    : [...DEFAULT_PRIORITY];
 
   const result: { name: string; transport: SynapseTransport }[] = [];
   for (const name of order) {
@@ -37,7 +48,7 @@ function allTransports(config: SynapseConfig): { name: string; transport: Synaps
 function primaryTransport(config: SynapseConfig): { name: string; transport: SynapseTransport } {
   const list = allTransports(config);
   if (list.length === 0) {
-    throw new Error('No transport configured. Set sync.git or sync.lark in synapse.yaml');
+    throw new Error('No transport configured. Set sync.git, sync.local, sync.http, or sync.lark in synapse.yaml');
   }
   return list[0]!;
 }
@@ -77,7 +88,7 @@ export async function pushMessage(
 
   const transports = allTransports(config);
   if (transports.length === 0) {
-    throw new Error('No transport configured. Set sync.git or sync.lark in synapse.yaml');
+    throw new Error('No transport configured. Set sync.git, sync.local, sync.http, or sync.lark in synapse.yaml');
   }
 
   const results = await Promise.all(
@@ -96,13 +107,21 @@ export async function pushMessage(
 
 /**
  * Pull from PRIMARY transport only.
+ * When query.unread is true, filters out messages already acked by this project.
  */
 export async function pullMessages(
   config: SynapseConfig,
   query?: MessageQuery
 ): Promise<SynapseMessage[]> {
   const { transport } = primaryTransport(config);
-  return transport.pull(query);
+  let messages = await transport.pull(query);
+
+  if (query?.unread) {
+    const ackedIds = await getAckedIds(config.project.name);
+    messages = messages.filter((m) => !ackedIds.has(m.id));
+  }
+
+  return messages;
 }
 
 /**
@@ -114,4 +133,24 @@ export async function getMessage(
 ): Promise<SynapseMessage | null> {
   const { transport } = primaryTransport(config);
   return transport.get(id);
+}
+
+/**
+ * Mark a single message as processed.
+ */
+export async function ackMessageById(
+  id: string,
+  config: SynapseConfig
+): Promise<void> {
+  await ackMessage(config.project.name, id);
+}
+
+/**
+ * Mark multiple messages as processed.
+ */
+export async function ackMessagesByIds(
+  ids: string[],
+  config: SynapseConfig
+): Promise<number> {
+  return ackMessages(config.project.name, ids);
 }

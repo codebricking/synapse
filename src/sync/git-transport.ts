@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import simpleGit from 'simple-git';
 import type { SynapseMessage, SynapseConfig, MessageQuery, SynapseTransport } from '../types.js';
+import { resolveTarget, createDocument, upsertSection, parseSections, sectionsToMessages } from './md-parser.js';
 
 function repoName(repo: string): string {
   const match = repo.match(/\/([^/]+?)(?:\.git)?$/);
@@ -45,23 +46,36 @@ export class GitTransport implements SynapseTransport {
     try {
       await git.pull('origin', this.branch, ['--rebase']);
     } catch {
-      // offline is fine — work with local copy
+      // offline — work with local copy
     }
     return git;
   }
 
-  private messagesDir() {
-    return join(this.localPath, 'messages');
+  private projectsDir() {
+    return join(this.localPath, 'projects');
+  }
+
+  private mdFilePath(project: string, target: string): string {
+    return join(this.projectsDir(), project, `${target}.md`);
   }
 
   async push(msg: SynapseMessage): Promise<SynapseMessage> {
     const git = await this.ensureRepo();
-    const projectDir = join(this.messagesDir(), msg.project);
+    const target = resolveTarget(msg);
+    const projectDir = join(this.projectsDir(), msg.project);
     await mkdir(projectDir, { recursive: true });
 
-    const date = msg.timestamp.split('T')[0]!;
-    const filePath = join(projectDir, `${date}-${msg.id}.json`);
-    await writeFile(filePath, JSON.stringify(msg, null, 2), 'utf-8');
+    const filePath = this.mdFilePath(msg.project, target);
+    let updatedContent: string;
+
+    if (existsSync(filePath)) {
+      const existing = await readFile(filePath, 'utf-8');
+      updatedContent = upsertSection(existing, msg);
+    } else {
+      updatedContent = createDocument(msg, target);
+    }
+
+    await writeFile(filePath, updatedContent, 'utf-8');
 
     await git.add(filePath);
     const status = await git.status();
@@ -79,7 +93,6 @@ export class GitTransport implements SynapseTransport {
             `Fix: check your git credentials for ${this.repo}`
           );
         }
-        // other push errors (offline, etc.) are non-fatal
       }
     }
     return msg;
@@ -87,23 +100,26 @@ export class GitTransport implements SynapseTransport {
 
   async pull(query?: MessageQuery): Promise<SynapseMessage[]> {
     await this.ensureRepo();
-    const dir = this.messagesDir();
+    const dir = this.projectsDir();
     if (!existsSync(dir)) return [];
 
     const messages: SynapseMessage[] = [];
-    const walk = async (d: string) => {
-      if (!existsSync(d)) return;
-      for (const entry of await readdir(d, { withFileTypes: true })) {
-        const full = join(d, entry.name);
-        if (entry.isDirectory()) { await walk(full); continue; }
-        if (!entry.name.endsWith('.json')) continue;
+
+    for (const projectEntry of await readdir(dir, { withFileTypes: true })) {
+      if (!projectEntry.isDirectory()) continue;
+      const projectName = projectEntry.name;
+      const projectDir = join(dir, projectName);
+
+      for (const fileEntry of await readdir(projectDir, { withFileTypes: true })) {
+        if (!fileEntry.name.endsWith('.md')) continue;
+        const target = fileEntry.name.replace(/\.md$/, '');
         try {
-          const parsed = JSON.parse(await readFile(full, 'utf-8')) as SynapseMessage;
-          if (parsed.id && parsed.timestamp && parsed.title) messages.push(parsed);
-        } catch { /* skip */ }
+          const content = await readFile(join(projectDir, fileEntry.name), 'utf-8');
+          const sections = parseSections(content);
+          messages.push(...sectionsToMessages(sections, projectName, target));
+        } catch { /* skip unreadable files */ }
       }
-    };
-    await walk(dir);
+    }
 
     return applyQuery(messages, query);
   }

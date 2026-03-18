@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { SynapseMessage, SynapseConfig, MessageQuery, SynapseTransport } from '../types.js';
 import { applyQuery } from './git-transport.js';
+import { resolveTarget, createDocument, upsertSection, parseSections, sectionsToMessages } from './md-parser.js';
 
 export class LocalTransport implements SynapseTransport {
   private dir: string;
@@ -14,38 +15,54 @@ export class LocalTransport implements SynapseTransport {
       : join(homedir(), '.synapse', 'local-messages');
   }
 
-  private messagesDir(): string {
-    return join(this.dir, 'messages');
+  private projectsDir(): string {
+    return join(this.dir, 'projects');
+  }
+
+  private mdFilePath(project: string, target: string): string {
+    return join(this.projectsDir(), project, `${target}.md`);
   }
 
   async push(msg: SynapseMessage): Promise<SynapseMessage> {
-    const projectDir = join(this.messagesDir(), msg.project);
+    const target = resolveTarget(msg);
+    const projectDir = join(this.projectsDir(), msg.project);
     await mkdir(projectDir, { recursive: true });
 
-    const date = msg.timestamp.split('T')[0]!;
-    const filePath = join(projectDir, `${date}-${msg.id}.json`);
-    await writeFile(filePath, JSON.stringify(msg, null, 2), 'utf-8');
+    const filePath = this.mdFilePath(msg.project, target);
+    let updatedContent: string;
+
+    if (existsSync(filePath)) {
+      const existing = await readFile(filePath, 'utf-8');
+      updatedContent = upsertSection(existing, msg);
+    } else {
+      updatedContent = createDocument(msg, target);
+    }
+
+    await writeFile(filePath, updatedContent, 'utf-8');
     return msg;
   }
 
   async pull(query?: MessageQuery): Promise<SynapseMessage[]> {
-    const dir = this.messagesDir();
+    const dir = this.projectsDir();
     if (!existsSync(dir)) return [];
 
     const messages: SynapseMessage[] = [];
-    const walk = async (d: string) => {
-      if (!existsSync(d)) return;
-      for (const entry of await readdir(d, { withFileTypes: true })) {
-        const full = join(d, entry.name);
-        if (entry.isDirectory()) { await walk(full); continue; }
-        if (!entry.name.endsWith('.json')) continue;
+
+    for (const projectEntry of await readdir(dir, { withFileTypes: true })) {
+      if (!projectEntry.isDirectory()) continue;
+      const projectName = projectEntry.name;
+      const projectDir = join(dir, projectName);
+
+      for (const fileEntry of await readdir(projectDir, { withFileTypes: true })) {
+        if (!fileEntry.name.endsWith('.md')) continue;
+        const target = fileEntry.name.replace(/\.md$/, '');
         try {
-          const parsed = JSON.parse(await readFile(full, 'utf-8')) as SynapseMessage;
-          if (parsed.id && parsed.timestamp && parsed.title) messages.push(parsed);
+          const content = await readFile(join(projectDir, fileEntry.name), 'utf-8');
+          const sections = parseSections(content);
+          messages.push(...sectionsToMessages(sections, projectName, target));
         } catch { /* skip */ }
       }
-    };
-    await walk(dir);
+    }
 
     return applyQuery(messages, query);
   }

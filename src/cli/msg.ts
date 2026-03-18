@@ -18,11 +18,12 @@ export function createMsgCommand(): Command {
     .option('--content <text>', 'Message body', '')
     .option('--tags <tags>', 'Comma-separated tags')
     .option('--files <files>', 'Comma-separated related file paths')
+    .option('--target <name>', 'Target MD file name (e.g. api-user, decisions)')
     .option('--metadata <json>', 'Structured metadata as JSON string');
 
   send.action(async (
     title: string,
-    opts: { role: string; category: string; content: string; tags?: string; files?: string; metadata?: string },
+    opts: { role: string; category: string; content: string; tags?: string; files?: string; target?: string; metadata?: string },
     command: Command
   ) => {
     const configPath = command?.parent?.parent?.opts?.()?.config as string | undefined;
@@ -43,6 +44,7 @@ export function createMsgCommand(): Command {
         content: opts.content || title,
         tags: opts.tags?.split(',').map((t) => t.trim()),
         project: config.project.name,
+        target: opts.target,
         relatedFiles: opts.files?.split(',').map((f) => f.trim()),
         metadata,
       },

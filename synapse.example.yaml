@@ -7,18 +7,22 @@ project:
 sync:
   # Pull reads from the primary transport only.
   # Push writes to ALL configured transports.
-  # Default priority: git > local > http > lark > larkWebhook
+  # Default priority: git > local > http > larkWebhook
   # Override with primary:
   # primary: local
 
   # ── Git (developers) ──────────────────────────
-  # Full read/write. Stores messages as JSON in a shared repo.
+  # Full read/write. Stores messages as MD files in a shared repo.
+  # Repo structure:
+  #   projects/{project-name}/{target}.md
+  # Each push upserts a section in the target MD file.
+  # Git history tracks all changes (use git diff to see what changed).
   git:
     repo: https://github.com/org/synapse-hub.git
     branch: main
 
   # ── Local file storage ────────────────────────
-  # Full read/write. JSON files on disk. No external deps.
+  # Full read/write. MD files on disk. No external deps.
   # Great for `synapse serve` — server stores data locally.
   # dir defaults to ~/.synapse/local-messages
   local:
@@ -26,19 +30,12 @@ sync:
 
   # ── HTTP remote (PM / non-tech) ───────────────
   # Full read/write. Connects to a teammate's `synapse serve`.
-  # PM only needs a URL, no git/lark setup.
+  # PM only needs a URL, no git setup.
   # http:
   #   url: http://192.168.1.100:3000
   #   token: optional-auth-token
 
-  # ── Lark enterprise app ───────────────────────
-  # Full read/write. Requires enterprise app + admin approval.
-  # lark:
-  #   appId: cli_xxxxxxxxxxxxxxxx
-  #   appSecret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  #   chatId: oc_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-  # ── Lark Webhook (easiest notifications) ──────
+  # ── Lark Webhook (one-way notifications) ──────
   # Push-only. Add a custom bot in any Feishu group → get URL.
   # No enterprise app, no admin approval, 1 minute setup.
   # larkWebhook:

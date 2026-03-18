@@ -61,6 +61,7 @@ function createApp(): Hono {
         content: body.content,
         tags: body.tags,
         project: body.project ?? config.project.name,
+        target: body.target,
         relatedFiles: body.relatedFiles,
         metadata: body.metadata,
       },

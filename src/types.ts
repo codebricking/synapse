@@ -46,6 +46,8 @@ export interface SynapseMessage {
   content: string;
   tags?: string[];
   project: string;
+  /** Target MD file name (without .md). e.g. "api-user", "decisions". Defaults to category. */
+  target?: string;
   relatedFiles?: string[];
   metadata?: MessageMetadata;
 }
@@ -67,16 +69,10 @@ export interface SynapseConfig {
     name: string;
   };
   sync: {
-    primary?: 'git' | 'lark' | 'local' | 'http';
+    primary?: 'git' | 'local' | 'http';
     git?: {
       repo: string;
       branch?: string;
-    };
-    lark?: {
-      appId: string;
-      appSecret: string;
-      chatId: string;
-      webhookUrl?: string;
     };
     larkWebhook?: {
       url: string;

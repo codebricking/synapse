@@ -25,19 +25,11 @@ const SynapseConfigSchema = z.object({
   }),
   sync: z
     .object({
-      primary: z.enum(['git', 'lark', 'local', 'http']).optional(),
+      primary: z.enum(['git', 'local', 'http']).optional(),
       git: z
         .object({
           repo: z.string(),
           branch: z.string().optional(),
-        })
-        .optional(),
-      lark: z
-        .object({
-          appId: z.string(),
-          appSecret: z.string(),
-          chatId: z.string(),
-          webhookUrl: z.string().optional(),
         })
         .optional(),
       larkWebhook: z
@@ -64,7 +56,7 @@ const SynapseConfigSchema = z.object({
 let _configPath: string | null = null;
 
 function hasAnyTransport(sync?: Partial<SynapseConfig['sync']>): boolean {
-  return !!(sync?.git || sync?.lark || sync?.larkWebhook || sync?.local || sync?.http);
+  return !!(sync?.git || sync?.larkWebhook || sync?.local || sync?.http);
 }
 
 function applyDefaults(config: Partial<SynapseConfig>): SynapseConfig {
@@ -78,7 +70,6 @@ function applyDefaults(config: Partial<SynapseConfig>): SynapseConfig {
       git: config.sync?.git
         ? { repo: config.sync.git.repo, branch: config.sync.git.branch ?? 'main' }
         : undefined,
-      lark: config.sync?.lark,
       larkWebhook: config.sync?.larkWebhook,
       local: config.sync?.local ?? (useLocalFallback ? {} : undefined),
       http: config.sync?.http,

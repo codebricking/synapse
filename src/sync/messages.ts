@@ -1,7 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { SynapseMessage, SynapseConfig, MessageQuery, SynapseTransport } from '../types.js';
 import { GitTransport } from './git-transport.js';
-import { LarkTransport } from './lark-transport.js';
 import { LocalTransport } from './local-transport.js';
 import { HttpTransport } from './http-transport.js';
 import { LarkWebhookTransport } from './lark-webhook-transport.js';
@@ -14,18 +13,17 @@ function generateId(): string {
 
 function buildTransport(name: string, config: SynapseConfig): SynapseTransport | null {
   if (name === 'git' && config.sync.git?.repo) return new GitTransport(config);
-  if (name === 'lark' && config.sync.lark?.appId) return new LarkTransport(config);
   if (name === 'local' && config.sync.local) return new LocalTransport(config);
   if (name === 'http' && config.sync.http?.url) return new HttpTransport(config);
   if (name === 'larkWebhook' && config.sync.larkWebhook?.url) return new LarkWebhookTransport(config);
   return null;
 }
 
-const DEFAULT_PRIORITY = ['git', 'local', 'http', 'lark', 'larkWebhook'] as const;
+const DEFAULT_PRIORITY = ['git', 'local', 'http', 'larkWebhook'] as const;
 
 /**
  * All configured transports, ordered by priority.
- * Default priority: git > local > http > lark > larkWebhook.
+ * Default priority: git > local > http > larkWebhook.
  * Override primary with sync.primary (only affects pull source).
  */
 function allTransports(config: SynapseConfig): { name: string; transport: SynapseTransport }[] {
@@ -48,7 +46,7 @@ function allTransports(config: SynapseConfig): { name: string; transport: Synaps
 function primaryTransport(config: SynapseConfig): { name: string; transport: SynapseTransport } {
   const list = allTransports(config);
   if (list.length === 0) {
-    throw new Error('No transport configured. Set sync.git, sync.local, sync.http, or sync.lark in synapse.yaml');
+    throw new Error('No transport configured. Set sync.git, sync.local, or sync.http in synapse.yaml');
   }
   return list[0]!;
 }
@@ -82,13 +80,14 @@ export async function pushMessage(
     content: msg.content,
     tags: msg.tags,
     project: msg.project,
+    target: msg.target,
     relatedFiles: msg.relatedFiles,
     ...(msg.metadata ? { metadata: msg.metadata } : {}),
   };
 
   const transports = allTransports(config);
   if (transports.length === 0) {
-    throw new Error('No transport configured. Set sync.git, sync.local, sync.http, or sync.lark in synapse.yaml');
+    throw new Error('No transport configured. Set sync.git, sync.local, or sync.http in synapse.yaml');
   }
 
   const results = await Promise.all(

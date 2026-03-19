@@ -44,6 +44,15 @@ export class GitTransport implements SynapseTransport {
     }
     const git = simpleGit(this.localPath);
     try {
+      await git.fetch('origin', this.branch);
+      const localBranches = await git.branchLocal();
+      if (localBranches.current !== this.branch) {
+        if (localBranches.all.includes(this.branch)) {
+          await git.checkout(this.branch);
+        } else {
+          await git.raw(['checkout', '-B', this.branch, `origin/${this.branch}`]);
+        }
+      }
       await git.pull('origin', this.branch, ['--rebase']);
     } catch {
       // offline — work with local copy
@@ -82,7 +91,7 @@ export class GitTransport implements SynapseTransport {
     if (status.staged.length > 0) {
       await git.commit(`synapse: [${msg.role}] ${msg.title}`);
       try {
-        await git.push();
+        await git.push('origin', this.branch);
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         if (detail.includes('Authentication') || detail.includes('Permission') || detail.includes('403') || detail.includes('401')) {

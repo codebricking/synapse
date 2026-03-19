@@ -18,6 +18,7 @@
     "build": "tsup src/index.ts --format esm --dts --clean",
     "build:binary": "npx tsup src/index.ts --format cjs --no-dts --clean --out-dir dist-bin && npx pkg dist-bin/index.cjs --targets node20-macos-arm64,node20-macos-x64,node20-linux-x64,node20-win-x64 --output bin/synapse",
     "start": "node dist/index.js",
+    "test": "node --import tsx --test",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
